@@ -10,17 +10,17 @@ class Sensor:
         self.creature = creature
         self.rayCount = 10
         self.rayLength = raylength
-        self.fov = self.creature.fov
+        self.fov = self.creature.fov # -> radians
 
         self.rays = []
     
     def intersects(self, angle, creatures):
-        for dist in range(1, self.rayLength, 4):
+        for dist in range(1, self.rayLength, 5):
             pos = (self.creature.pos.x - math.sin(angle) * dist,
                    self.creature.pos.y - math.cos(angle) * dist)
             for creature in creatures:
-                # if creature.type == self.creature.type:
-                #     continue
+                if creature.type == self.creature.type:
+                    continue
                 if creature == self.creature:
                     continue
                 if creature.rect.collidepoint(pos):
@@ -32,7 +32,8 @@ class Sensor:
         self.rays = []
         angles = []
         for i in range(self.rayCount):
-            angle = lerp(self.fov / 2, - self.fov / 2, i / (self.rayCount - 1)) + self.creature.angle
+            radians = math.radians(self.creature.angle) - math.radians(45)
+            angle = lerp(self.fov / 2, - self.fov / 2, i / (self.rayCount - 1)) + radians
             start = [self.creature.pos.x, self.creature.pos.y]
             angles.append(angle)
             end = [self.creature.pos.x - math.sin(angle) * self.rayLength,
@@ -50,6 +51,6 @@ class Sensor:
             if intersect != 0:
                 self.rays[i].append((255, 0, 0))
             else:
-                self.rays[i].append((0, 255, 0))
+                self.rays[i].append((0, 247, 70))
 
         return intersects

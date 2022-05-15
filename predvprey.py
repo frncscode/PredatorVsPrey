@@ -2,6 +2,8 @@
 
 # -> imports
 import pstats
+
+from numpy import isin
 import creatures as _creatures
 from pygame.locals import * 
 import pygame
@@ -17,10 +19,17 @@ def main():
 
     preyReproductionInterval = 60 * 10
 
+    # -> func to draw the bg
+    def drawBackground():
+        win.fill((173, 173, 173))
+        for y in range(6):
+            for x in range(6):
+                pygame.draw.rect(win, (156, 156, 156), (x * 100, y * 100, 100, 100), 2)
+
     # -> simulation set up
     creatures = [_creatures.Prey(random.randint(1, 600), random.randint(1, 600))
-                for _ in range(20)]
-    for _ in range(15):
+                for _ in range(1)]
+    for _ in range(0):
         creatures.append(_creatures.Predator(random.randint(1, 600), random.randint(1, 600)))
     preys = [creature for creature in creatures if isinstance(creature, _creatures.Prey)]
     predators = [creature for creature in creatures if isinstance(creature, _creatures.Predator)]
@@ -28,6 +37,8 @@ def main():
     # -> game loop
     selectedCreature = None
     clock = pygame.time.Clock()
+    bestPreyPerformer = _creatures.Prey(-69, -69) # template Prey
+    bestPredPerformer = _creatures.Predator(-69, -69) # template Predator
     while True:
         # -> event loop
         for event in pygame.event.get():
@@ -94,8 +105,32 @@ def main():
             elif isinstance(child, _creatures.Predator):
                 predators.append(child)
 
+        # checking for best performers
+        for prey in preys:
+            if prey.lifetime >= bestPreyPerformer.lifetime:
+                bestPreyPerformer = prey
+        for pred in predators:
+            if pred.kills / (pred.lifetime + 1) >= bestPredPerformer.kills / (bestPredPerformer.lifetime + 1):
+                bestPredPerformer = pred
+
+        # -> creature spawning
+        if not preys:
+            for _ in range(3):
+                spawned = bestPreyPerformer.clone()
+                preys.append(spawned)
+                creatures.append(spawned)
+        if not predators:
+            for _ in range(3):
+                spawned = bestPredPerformer.clone()
+                predators.append(spawned)
+                creatures.append(spawned)
+
+        if len(preys) > 50:
+            for prey in random.sample(preys, 5):
+                prey.dead = True
+        
         # -> render
-        win.fill((200, 200, 200))
+        drawBackground()
         for creature in creatures:
             if not creature.dead:
                 creature.draw(win)
