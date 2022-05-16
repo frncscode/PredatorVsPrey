@@ -4,6 +4,7 @@ import pygame
 def lerp(a, b, t):
     return a + (a - b) * t
 
+# -> sensor class for ray casting
 class Sensor:
 
     def __init__(self, creature, raylength):
@@ -11,7 +12,6 @@ class Sensor:
         self.rayCount = 10
         self.rayLength = raylength
         self.fov = self.creature.fov # -> radians
-
         self.rays = []
     
     def intersects(self, angle, creatures):
@@ -52,5 +52,30 @@ class Sensor:
                 self.rays[i].append((255, 0, 0))
             else:
                 self.rays[i].append((0, 247, 70))
-
+        
         return intersects
+        
+        '''
+    possible optimization ->
+        intersects = []
+        self.rays = []
+        angles = []
+        for i in range(self.rayCount):
+            added = False
+            radians = math.radians(self.creature.angle) - math.radians(45)
+            angle = lerp(self.fov / 2, - self.fov / 2, i / (self.rayCount - 1)) + radians
+            start = [self.creature.pos.x, self.creature.pos.y]
+            angles.append(angle)
+            for dist in range(1, self.rayLength, 5):
+                end = [self.creature.pos.x - math.sin(angle) * dist,
+                       self.creature.pos.y - math.cos(angle)* dist ]
+                for creature in creatures:
+                    if not(creature.type == self.creature.type) and creature.rect.collidepoint(end):
+                        intersects.append(round(1 - dist / self.rayLength, 2))
+                        added = True
+                        self.rays.append([start, end, (255, 0, 0)])
+            if not added:
+                intersects.append(0)
+                self.rays.append([start, end, (0, 247, 70)])
+        return intersects
+        '''
