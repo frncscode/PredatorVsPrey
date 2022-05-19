@@ -11,3 +11,4 @@ from pygame for rendering and numpy for matrix operations.
 * Tweak how energy works in prey
 * Tweak the best performance system
 * Tweak neural network; take in energy as an input
+* Heavily optimize the sensor system

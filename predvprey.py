@@ -3,72 +3,46 @@
 # -> imports
 import creatures as _creatures
 from pygame.locals import * 
+import threading
 import pygame
 import random
+import multiprocessing
+import math
+import time
 import sys
 
 pygame.init()
 
-def getFontObject(msg, fontSize=24, colour=(0, 0, 0)):
-    font = pygame.font.SysFont('Consolas', fontSize)
-    fontSurface = font.render(msg, True, colour)
-    return fontSurface
-
-def generateCreatureSidebar(creature, winDimensions):
-    # -> returns a sidebar surface for infomation on creatures
-    sidebarSize = (winDimensions[0] * 0.3, winDimensions[1])
-    surface = pygame.Surface(sidebarSize, pygame.SRCALPHA)
-    surface.fill((0, 0, 0, 100))
-
-    # -> drawing the side bar title
-    fontObject = getFontObject(creature.type, fontSize=36, colour=(255, 0, 0))
-    surface.blit(fontObject, (sidebarSize[0] * 0.5 - fontObject.get_width() / 2, sidebarSize[1] * 0.01))
-
-    if creature.type == 'PREDATOR': # -> display kills if creature is a predator
-        surface.blit(getFontObject('Kills: '+str(creature.kills), colour=(255, 0, 0)), (0, sidebarSize[1] * 0.1))
-
-    # -> drawing lifetime
-    surface.blit(getFontObject('Lifetime: '+str(creature.lifetime), colour=(255, 0, 0)), (0, sidebarSize[1] * 0.15))
-
-    # -> drawing the energy progress bar
-    surface.blit(getFontObject('Energy:', colour=(255, 0, 0)), (0, sidebarSize[1] * 0.2))
-    progressBarPos = (sidebarSize[0] * 0.1, sidebarSize[1] * 0.25)
-    progressBarLength = sidebarSize[0] * 0.8
-    pygame.draw.rect(surface, (0, 0, 0), (progressBarPos[0], progressBarPos[1], progressBarLength, sidebarSize[1] * 0.05))
-    pygame.draw.rect(surface, (0, 255, 0), (progressBarPos[0], progressBarPos[1], progressBarLength * (creature.energy / creature.maxEnergy), sidebarSize[1] * 0.05))
-
-    # -> drawing the speed progress bar
-    surface.blit(getFontObject('Speed:', colour=(255, 0, 0)), (0, sidebarSize[1] * 0.35))
-    progressBarPos = (sidebarSize[0] * 0.1, sidebarSize[1] * 0.4)
-    progressBarLength = sidebarSize[0] * 0.8
-    pygame.draw.rect(surface, (0, 0, 0), (progressBarPos[0], progressBarPos[1], progressBarLength, sidebarSize[1] * 0.05))
-    pygame.draw.rect(surface, (0, 255, 0), (progressBarPos[0], progressBarPos[1], progressBarLength * (creature.speed / creature.topSpeed), sidebarSize[1] * 0.05))
-
-    # -> drawing realtime neural network visualizer
-    surface.blit(getFontObject('Network:', colour=(255, 0, 0)), (0, sidebarSize[1] * 0.5))
+def drawEye(creature, win):
+    pos = creature.pos
+    angle = math.radians(creature.angle)
     intersects = creature.intersects
     intersects.reverse()
-    connectionLength = sidebarSize[0] * 0.6
-    lenBetweenNeuron = sidebarSize[0] // len(intersects)
-    pos = (sidebarSize[0] * 0.2, winDimensions[1] * 0.55)
-    topNeuronPos = (sidebarSize[0] * 0.8, pos[1] + (lenBetweenNeuron * len(intersects) * 0.5 - (lenBetweenNeuron * 0.5)))
-    bottomNeuronPos = (sidebarSize[0] * 0.8, pos[1] + (lenBetweenNeuron * len(intersects) * 0.5 + (lenBetweenNeuron * 0.5)))
-    line1TotalAlpha = 0
-    line2TotalAlpha = 0
-    for yMove in range(len(intersects)):
-        pygame.draw.circle(surface, (0, 255, 0, (intersects[yMove] * 255)), (pos[0], pos[1] + yMove * lenBetweenNeuron), 5)
-        line1Alpha = (intersects[yMove] * 255)
-        line2Alpha = (intersects[yMove] * 255)
-        pygame.draw.line(surface, (255, 0, 0, line1Alpha), (pos[0], pos[1] + yMove * lenBetweenNeuron), topNeuronPos, 2)
-        pygame.draw.line(surface, (255, 0, 0, line2Alpha), (pos[0], pos[1] + yMove * lenBetweenNeuron), bottomNeuronPos, 2)
-        line1TotalAlpha += line1Alpha
-        line2TotalAlpha += line2Alpha
-    
-    pygame.draw.circle(surface, (0, 255, 0, (line1TotalAlpha / (len(intersects) * 255) * 255)), topNeuronPos, 7)
-    pygame.draw.circle(surface, (0, 255, 0, (line2TotalAlpha / (len(intersects) * 255) * 255)), bottomNeuronPos, 7)
 
+    pupilMajorDirection = intersects.index(max(intersects)) if intersects != [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] else (len(intersects) - 1) / 2
+    pupilDirectionScalar = pupilMajorDirection / (len(intersects) - 1)
+    if creature.type == 'PREY':pupilDirectionScalar = 0.5
+    pupilAngle = -math.degrees(creature.fov) / 2 + math.degrees(creature.fov) * pupilDirectionScalar
+    pupilAngle += creature.angle + pupilAngle
+    pupilAngle = math.radians(pupilAngle)
 
-    return surface
+    startPos = (pos.x - math.sin(angle) * creature.size * 0.2, pos.y - math.cos(angle) * creature.size * 0.2)
+    pygame.draw.circle(win, (255, 255, 255), startPos, creature.size / 3) # -> the iris
+    pygame.draw.circle(win, (0, 0, 0), (startPos[0] - math.sin(pupilAngle) * creature.size / 6, startPos[1] - math.cos(pupilAngle) * creature.size / 6), creature.size / 5)
+
+def generateCreaturePool(preyCount, predCount, screenDimensions):
+    preys, preds = [], []
+    for _ in range(preyCount):
+        preys.append(_creatures.Prey(random.randint(0, screenDimensions[0]), random.randint(0, screenDimensions[1]), screenDimensions))
+    for _ in range(predCount):
+        preds.append(_creatures.Predator(random.randint(0, screenDimensions[0]), random.randint(0, screenDimensions[1]), screenDimensions))
+    return preys, preds, preys + preds
+
+# -> man in the middle function for threading
+def updateCreatures(pool, creatures):
+    for idx,creature in enumerate(pool):
+        creature.update(creatures)
+
 
 def main():
     # -> pygame setup
@@ -82,44 +56,55 @@ def main():
 
     # -> func to draw the bg
     def drawBackground():
-        win.fill((173, 173, 173))
+        win.fill((40, 42, 54))
         for y in range(screenDimensions[1] // 50):
             for x in range(screenDimensions[0] // 50):
-                pygame.draw.rect(win, (156, 156, 156), (x * 50, y * 50, 50, 50), 2)
+                pygame.draw.rect(win, (68, 71, 90), (x * 50, y * 50, 50, 50), 2)
 
     # -> simulation set up
-    creatures = [_creatures.Prey(random.randint(1, 600), random.randint(1, 600), screenDimensions)
-                for _ in range(1)]
-    for _ in range(0):
-        creatures.append(_creatures.Predator(random.randint(1, 600), random.randint(1, 600), screenDimensions))
-    preys = [creature for creature in creatures if isinstance(creature, _creatures.Prey)]
-    predators = [creature for creature in creatures if isinstance(creature, _creatures.Predator)]
+    preys, predators, creatures = generateCreaturePool(15, 15, screenDimensions)
 
-    # -> game loop
+    # -> initial set up
     selectedCreature = None
     clock = pygame.time.Clock()
     bestPreyPerformer = _creatures.Prey(-69, -69, screenDimensions) # -> template Prey
     bestPredPerformer = _creatures.Predator(-69, -69, screenDimensions) # -> template Predator
-    while True:
+    sidebarOpenTimerMax = 20
+    sidebarOpenTimer = 0
+
+    while True: # -> game loop
+
+        # -> stuff
+        mousePos = pygame.mouse.get_pos()
+        events = pygame.event.get()
+        keys = pygame.key.get_pressed()
+        clickedOnSideBar = False
+
         # -> event loop
-        for event in pygame.event.get():
+        for event in events:
             if event.type == pygame.QUIT:
                 pygame.quit()
-                sys.exit()
                 return
+
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
+                if event.button == 1: # -> left button down
                     if not selectedCreature:
                         for creature in creatures:
                             if creature.rect.collidepoint(pygame.mouse.get_pos()):
                                 selectedCreature = creature
+                                sidebarOpenTimer = 0
                                 creature.selected = True
                                 break
                     else:
-                        selectedCreature.selected = False
-                        selectedCreature = None
-        
+                        if mousePos[0] > screenDimensions[0] * 0.3:
+                            selectedCreature.selected = False
+                            selectedCreature.remoteControlled = False
+                            selectedCreature = None
+                        else:
+                            clickedOnSideBar = True
+
         # -> handling creature deaths
+        start = time.perf_counter_ns()
         if creatures:
             for idx, creature in sorted(enumerate(creatures), reverse=True):
                 if creature.dead:
@@ -134,20 +119,35 @@ def main():
                     predators.pop(idx)
 
         # -> updates
+        sidebarOpenTimer += 1 
+        if sidebarOpenTimer > sidebarOpenTimerMax:
+            sidebarOpenTimer = sidebarOpenTimerMax
+        
+        # threading test
+        a = creatures[:len(creatures) // 2]
+        b = creatures[len(creatures) // 2:]
+        x = threading.Thread(target=updateCreatures, args=[a, creatures])
+        y = threading.Thread(target=updateCreatures, args=[b, creatures])
+        start = time.perf_counter_ns()
+        x.start()
+        y.start()
+        x.join()
+        y.join()
+
+        
+        # -> handling reproductions
         reproductionPool = []
-        for idx, creature in sorted(enumerate(creatures), reverse=True):
-            creature.update(creatures)
-            # -> handling reproductions
-            if isinstance(creature, _creatures.Prey) and creature.reproduceTimer > preyReproductionInterval:
+        for creature in creatures:
+            if creature.type == 'PREY' and creature.reproduceTimer > preyReproductionInterval:
                 reproductionPool.append(creature.reproduce())
                 creature.reproduceTimer = 0
-            elif isinstance(creature, _creatures.Predator) and creature.reproduceKills >= creature.killsToReproduce:
+            elif creature.type == 'PREDATOR' and creature.reproduceKills >= creature.killsToReproduce:
                 reproductionPool.append(creature.reproduce())
                 creature.reproduceKills = 0    
             creature.lifetime += 1
-            if isinstance(creature, _creatures.Prey):
+            if creature.type == 'PREY':
                 creature.reproduceTimer += 1
-        
+
         # -> handling predator killing
         for idx, prey in sorted(enumerate(preys), reverse=True):
             for predator in predators:
@@ -169,44 +169,50 @@ def main():
 
         # -> checking for best performers
         for prey in preys:
-            if prey.lifetime >= bestPreyPerformer.lifetime:
+            if prey.lifetime >= bestPreyPerformer.lifetime and not prey.remoteControlled:
                 bestPreyPerformer = prey
         for pred in predators:
-            if pred.kills / (pred.lifetime + 1) >= bestPredPerformer.kills / (bestPredPerformer.lifetime + 1):
+            if pred.kills * pred.lifetime >= bestPredPerformer.kills * bestPredPerformer.lifetime and not pred.remoteControlled:
                 bestPredPerformer = pred
 
         # -> creature spawning
         if not preys:
-            for _ in range(3):
+            for _ in range(2):
                 spawned = bestPreyPerformer.clone()
                 preys.append(spawned)
                 creatures.append(spawned)
             spawned = bestPreyPerformer.clone(mutate=False)
             preys.append(spawned)
             creatures.append(spawned)
+            spawned = bestPreyPerformer.clone(mutate=False)
+            preys.append(spawned)
+            creatures.append(spawned)
             bestPreyPerformer = spawned
-            # -> reset the best prey performer to be one of the new spawning creatures
-            # -> therefore the creature reproduction pool can vary more and more chance of a cool mutation occuring
+
         if not predators:
-            for _ in range(3):
+            for _ in range(2):
                 spawned = bestPredPerformer.clone()
                 predators.append(spawned)
                 creatures.append(spawned)
             spawned = bestPredPerformer.clone(mutate=False)
             predators.append(spawned)
             creatures.append(spawned)
-            bestPreyPerformer = spawned
+            spawned = bestPredPerformer.clone(mutate=False)
+            predators.append(spawned)
+            creatures.append(spawned)
+            spawned.kills += 1
             bestPredPerformer = spawned
-            # -> same reasoning as above - with the preys reproduction
 
         # -> killing off preys if they grow to much in numbers
-        if len(preys) > 50:
-            for prey in random.sample(preys, len(preys) - 50):
-                # -> caps prey count at 50
-                prey.dead = True
+        if True: # -> temporarily disabled
+            if len(preys) > 50:
+                for prey in random.sample(preys, len(preys) - 50):
+                    # -> caps prey count at 50
+                    prey.dead = True
         
         if selectedCreature:
             if selectedCreature.dead:
+                selectedCreature.remoteControlled = False
                 selectedCreature = None
         
         # -> render
@@ -215,21 +221,52 @@ def main():
             if not creature.dead:
                 creature.draw(win)
         if selectedCreature:
-            pygame.draw.circle(win, (0, 0, 255), selectedCreature.rect.center, selectedCreature.size // 2, 2) 
+            pygame.draw.circle(win, (255, 121, 198), selectedCreature.rect.center, selectedCreature.size // 2, 2)
+            pygame.draw.polygon(win, (255, 121, 198), [
+                (selectedCreature.pos.x, selectedCreature.pos.y - 0.8 * selectedCreature.size),
+                (selectedCreature.pos.x - selectedCreature.size / 3, selectedCreature.pos.y - 1.2 * selectedCreature.size),
+                (selectedCreature.pos.x + selectedCreature.size / 3, selectedCreature.pos.y - 1.2 * selectedCreature.size)
+                ])
+        for creature in creatures:
+            drawEye(creature, win)
+        
+        # draw a crown on the best performer (if on screen)
+        if bestPredPerformer in creatures:
+            pred = bestPredPerformer
+            if pred.selected:
+                pygame.draw.polygon(win, (255, 230, 0),[
+                (pred.pos.x - pred.size / 2, pred.pos.y - pred.size * 2.2),
+                (pred.pos.x, pred.pos.y - 0.5 * (pred.size * 2.2 + 18)),
+                (pred.pos.x + pred.size / 2, pred.pos.y - pred.size * 2.2),
+                (pred.pos.x + pred.size / 2, pred.pos.y - pred.size * 2.2 + 10),
+                (pred.pos.x - pred.size / 2, pred.pos.y - pred.size * 2.2 + 10)
+                ])
+
+            else:
+                pygame.draw.polygon(win, (255, 230, 0),[
+                (pred.pos.x - pred.size / 2, pred.pos.y - pred.size * 1.2),
+                (pred.pos.x, pred.pos.y - 0.5 * (pred.size * 1.2 + 10)),
+                (pred.pos.x + pred.size / 2, pred.pos.y - pred.size * 1.2),
+                (pred.pos.x + pred.size / 2, pred.pos.y - pred.size * 1.2 + 10),
+                (pred.pos.x - pred.size / 2, pred.pos.y - pred.size * 1.2 + 10)
+                ])
+
         # -> render the inspect side bar
-        if selectedCreature:win.blit(generateCreatureSidebar(selectedCreature, screenDimensions), (0, 0))
+        if selectedCreature:win.blit(_creatures.generateCreatureSidebar(selectedCreature, screenDimensions, clickedOnSideBar, mousePos),
+        (-screenDimensions[0] * 0.3 + (sidebarOpenTimer / sidebarOpenTimerMax) * screenDimensions[0] * 0.3, 0))
 
         pygame.display.update()
         clock.tick(60)
 
 main()
+sys.exit()
 
-# import cProfile
-# import pstats
+import cProfile
+import pstats
 
-# with cProfile.Profile() as pr:
-#     main()
+with cProfile.Profile() as pr:
+    main()
 
-# stats = pstats.Stats(pr)
-# stats.sort_stats(pstats.SortKey.TIME)
-# stats.print_stats()
+stats = pstats.Stats(pr)
+stats.sort_stats(pstats.SortKey.TIME)
+stats.print_stats()

@@ -1,5 +1,6 @@
 import math
 import pygame
+import time 
 
 def lerp(a, b, t):
     return a + (a - b) * t
@@ -21,8 +22,6 @@ class Sensor:
             for creature in creatures:
                 if creature.type == self.creature.type:
                     continue
-                if creature == self.creature:
-                    continue
                 if creature.rect.collidepoint(pos):
                     return round(1 - dist / self.rayLength, 2)
         return 0
@@ -31,6 +30,7 @@ class Sensor:
         intersects = []
         self.rays = []
         angles = []
+        startTime = time.perf_counter_ns()
         for i in range(self.rayCount):
             radians = math.radians(self.creature.angle) - math.radians(45)
             angle = lerp(self.fov / 2, - self.fov / 2, i / (self.rayCount - 1)) + radians
@@ -39,7 +39,9 @@ class Sensor:
             end = [self.creature.pos.x - math.sin(angle) * self.rayLength,
                    self.creature.pos.y - math.cos(angle) * self.rayLength]
             self.rays.append([start, end])
+        #print('Calculating Rays Took:', str(time.perf_counter_ns() - startTime))
         
+        startTime = time.perf_counter_ns()
         for i in range(len(angles)): # -> in parallel with rays[] 
             intersect = self.intersects(angles[i], creatures)
             intersects.append(intersect)
@@ -49,10 +51,10 @@ class Sensor:
             self.rays[i][1][1] = self.rays[i][1][1] - deltaY + (deltaY * (1 - intersect))
             # -> red: not intersected, green: interesected
             if intersect != 0:
-                self.rays[i].append((255, 0, 0))
+                self.rays[i].append((255, 85, 85))
             else:
-                self.rays[i].append((0, 247, 70))
-        
+                self.rays[i].append((80, 250, 123))
+        #print('Testing For Intersects Took:', str(time.perf_counter_ns() - startTime))
         return intersects
         
         '''
